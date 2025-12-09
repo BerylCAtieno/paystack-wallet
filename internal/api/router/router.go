@@ -45,12 +45,16 @@ func NewRouter(
 }
 
 func (r *Router) setupRoutes() {
-	// Health check
-	r.Engine.GET("/health", func(c *gin.Context) {
-		c.String(http.StatusOK, "OK")
+	r.Engine.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Welcome to the Wallet Service")
 	})
 
-	// Auth routes
+	r.Engine.GET("/health", func(c *gin.Context) {
+		c.String(http.StatusOK, "Service is running")
+	})
+
+	// AUTH ROUTES
+
 	authHandler := handlers.NewAuthHandler(
 		r.userRepo,
 		r.walletService,
@@ -59,28 +63,56 @@ func (r *Router) setupRoutes() {
 		r.cfg.GoogleRedirectURL,
 		r.cfg.JWTSecret,
 	)
+
 	r.Engine.GET("/auth/google", authHandler.GoogleLogin)
 	r.Engine.GET("/auth/google/callback", authHandler.GoogleCallback)
 
-	// API Key routes (requires JWT)
+	// API KEY ROUTES (JWT)
+
 	apiKeyHandler := handlers.NewAPIKeyHandler(r.authService)
+
 	keysGroup := r.Engine.Group("/keys")
 	keysGroup.Use(middleware.JWTAuth(r.cfg.JWTSecret))
-	keysGroup.POST("/create", apiKeyHandler.CreateAPIKey)
-	keysGroup.POST("/rollover", apiKeyHandler.RolloverAPIKey)
+	{
+		keysGroup.POST("/create", apiKeyHandler.CreateAPIKey)
+		keysGroup.POST("/rollover", apiKeyHandler.RolloverAPIKey)
+	}
 
-	// Wallet routes (JWT or API Key)
+	// WALLET ROUTES (JWT/API KEY)
+
 	paystackClient := paystack.NewClient(r.cfg.PaystackSecretKey)
 	walletHandler := handlers.NewWalletHandler(r.walletService, r.walletRepo, paystackClient)
-	walletGroup := r.Engine.Group("/wallet")
-	walletGroup.Use(middleware.FlexibleAuthGin(r.cfg.JWTSecret, r.authService))
-	walletGroup.POST("/deposit", walletHandler.InitiateDeposit)
-	walletGroup.GET("/balance", walletHandler.GetBalance)
-	walletGroup.POST("/transfer", walletHandler.Transfer)
-	walletGroup.GET("/transactions", walletHandler.GetTransactions)
 
-	// Webhook routes (no auth - validated by signature)
+	walletGroup := r.Engine.Group("/wallet")
+	{
+		walletGroup.POST(
+			"/deposit",
+			middleware.FlexibleAuth(r.cfg.JWTSecret, r.authService, auth.PermissionDeposit),
+			walletHandler.InitiateDeposit,
+		)
+
+		walletGroup.GET(
+			"/balance",
+			middleware.FlexibleAuth(r.cfg.JWTSecret, r.authService, auth.PermissionRead),
+			walletHandler.GetBalance,
+		)
+
+		walletGroup.POST(
+			"/transfer",
+			middleware.FlexibleAuth(r.cfg.JWTSecret, r.authService, auth.PermissionTransfer),
+			walletHandler.Transfer,
+		)
+
+		walletGroup.GET(
+			"/transactions",
+			middleware.FlexibleAuth(r.cfg.JWTSecret, r.authService, auth.PermissionRead),
+			walletHandler.GetTransactions,
+		)
+	}
+
+	// WEBHOOK (NO AUTH, SIGNATURE VALIDATION ONLY)
 	webhookHandler := handlers.NewWebhookHandler(r.walletService, r.cfg.PaystackSecretKey)
+
 	r.Engine.POST("/wallet/paystack/webhook", webhookHandler.HandlePaystackWebhook)
 	r.Engine.GET("/wallet/deposit/:reference/status", webhookHandler.GetDepositStatus)
 }
