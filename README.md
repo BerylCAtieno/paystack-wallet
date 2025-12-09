@@ -59,25 +59,6 @@ Copy `.env.example` to `.env` and fill in your credentials:
 cp .env.example .env
 ```
 
-Edit `.env`:
-
-```env
-PORT=8080
-DB_PATH=./wallet.db
-
-# Get from Google Cloud Console
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URL=http://localhost:8080/auth/google/callback
-
-# Generate a secure random string
-JWT_SECRET=your_jwt_secret_key
-
-# Get from Paystack Dashboard
-PAYSTACK_SECRET_KEY=sk_test_your_key
-PAYSTACK_PUBLIC_KEY=pk_test_your_key
-```
-
 ### 3. Get Google OAuth Credentials
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -367,10 +348,3 @@ Add the ngrok URL to Paystack webhook settings:
 ```
 https://your-ngrok-url.ngrok.io/wallet/paystack/webhook
 ```
-
-
-
-
-TODO: Fix migration error: 2025/12/09 22:30:26 Failed to run migrations: failed to execute migration internal/database/migrations/001_create_users.down.sql: FOREIGN KEY constraint failed
-
-TODO: Test user registration with Google
