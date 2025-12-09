@@ -9,7 +9,7 @@ import (
 )
 
 // FlexibleAuthGin allows either JWT or API Key authentication for Gin
-func FlexibleAuthGin(jwtSecret string, authService *auth.Service, requiredPermission ...auth.Permission) gin.HandlerFunc {
+func FlexibleAuth(jwtSecret string, authService *auth.Service, requiredPermission ...auth.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Try JWT first
 		if authHeader := c.GetHeader("Authorization"); authHeader != "" {

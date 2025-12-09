@@ -49,7 +49,7 @@ func GetAPIKey(c *gin.Context) *auth.APIKey {
 	return key
 }
 
-// GetAPIKeyUserID retrieves the authenticated user ID from Gin context
+// GetAPIKeyUserID retrieves the authenticated user ID from Gin Context
 func GetAPIKeyUserID(c *gin.Context) string {
 	val, exists := c.Get(APIKeyUserIDKey)
 	if !exists {
