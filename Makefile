@@ -35,7 +35,7 @@ setup:
 	cp .env.example .env
 	@echo "Please edit .env with your credentials"
 
-# Development - run with hot reload (requires air)
+# Development
 dev:
 	air
 
