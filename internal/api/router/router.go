@@ -39,7 +39,7 @@ func NewRouter(
 
 	// CORS Configuration
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080/docs", "https://paystack-wallet.fly.dev/docs"},
+		AllowOrigins:     []string{"http://localhost:8080/docs", "https://paystack-wallet.fly.dev/docs", "https://paystack-wallet-beryl-673dde33fda9.herokuapp.com/"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "x-api-key", "x-paystack-signature"},
 		ExposeHeaders:    []string{"Content-Length"},
