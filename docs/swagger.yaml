@@ -71,7 +71,7 @@ paths:
         because Google OAuth does **not** allow redirects from fetch/XHR requests.
 
         To use this endpoint, open it directly in your browser:  
-        **http://localhost:8080/auth/google**
+        **https://paystack-wallet.fly.dev/auth/google**
 
         The browser will follow the redirect to Google login correctly.
       responses:
