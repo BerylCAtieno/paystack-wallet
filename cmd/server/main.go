@@ -24,7 +24,7 @@ func main() {
 	defer db.Close()
 
 	// Run migrations
-	if err := database.RunMigrations(db, "internal/database/migrations"); err != nil {
+	if err := database.RunMigrations(db, ""); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -44,9 +44,8 @@ func main() {
 	r := router.NewRouter(cfg, authService, walletService, walletRepo, userRepo)
 
 	// Start server
-	addr := fmt.Sprintf(":%s", cfg.Port)
+	addr := fmt.Sprintf("0.0.0.0:%s", cfg.Port)
 	log.Printf("Server starting on %s", addr)
-	log.Printf("Swagger documentation available at http://localhost%s/docs/index.html", addr)
 	if err := r.Engine.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

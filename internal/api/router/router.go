@@ -39,7 +39,7 @@ func NewRouter(
 
 	// CORS Configuration
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080/docs"},
+		AllowOrigins:     []string{"http://localhost:8080/docs", "https://paystack-wallet.fly.dev/docs"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "x-api-key", "x-paystack-signature"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -73,7 +73,7 @@ func (r *Router) setupRoutes() {
 		c.Data(http.StatusOK, "application/yaml", docs.SwaggerYAML)
 	})
 
-	// Alternative: if the file doesn't exist, return a helpful error
+	// If the file doesn't exist, return a helpful error
 	r.Engine.GET("/swagger-check", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Swagger file should be at ./docs/swagger.yaml",

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/BerylCAtieno/paystack-wallet/internal/domain/user"
@@ -43,7 +44,8 @@ func NewAuthHandler(userRepo *repository.UserRepository, walletService *wallet.S
 
 func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 	url := h.oauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	c.Redirect(307, url) // Temporary redirect
+	log.Println("Google OAuth redirect URL:", url)
+	c.Redirect(307, url)
 }
 
 type GoogleUserInfo struct {

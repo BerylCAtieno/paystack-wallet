@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,13 +40,16 @@ func NewSQLite(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
 func RunMigrations(db *sql.DB, migrationsDir string) error {
-	entries, err := os.ReadDir(migrationsDir)
+	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
-		return fmt.Errorf("failed to read migrations directory: %w", err)
+		return fmt.Errorf("failed to read embedded migrations: %w", err)
 	}
 
-	// Sort files to run them in order (assuming filenames start with numbers)
+	// Sort files to run them in order
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name() < entries[j].Name()
 	})
@@ -55,19 +59,19 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 			continue
 		}
 
-		// Only run .sql files
+		// Only run .up.sql files (skip .down.sql files)
 		if filepath.Ext(entry.Name()) != ".sql" {
 			continue
 		}
 
-		path := filepath.Join(migrationsDir, entry.Name())
-		content, err := os.ReadFile(path)
+		// Read from embedded filesystem, not from disk
+		content, err := migrationsFS.ReadFile(filepath.Join("migrations", entry.Name()))
 		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", path, err)
+			return fmt.Errorf("failed to read migration file %s: %w", entry.Name(), err)
 		}
 
 		if _, err := db.Exec(string(content)); err != nil {
-			return fmt.Errorf("failed to execute migration %s: %w", path, err)
+			return fmt.Errorf("failed to execute migration %s: %w", entry.Name(), err)
 		}
 	}
 
