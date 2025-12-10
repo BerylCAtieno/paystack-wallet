@@ -15,10 +15,6 @@
 # Dependency directories
 /vendor/
 
-# Go module cache
-/go.mod
-/go.sum
-
 # Editor and IDE specific files
 .idea/
 .vscode/
