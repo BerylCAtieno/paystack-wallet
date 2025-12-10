@@ -46,6 +46,7 @@ func main() {
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("Server starting on %s", addr)
+	log.Printf("Swagger documentation available at http://localhost%s/docs/index.html", addr)
 	if err := r.Engine.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

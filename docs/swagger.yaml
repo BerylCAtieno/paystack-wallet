@@ -1,0 +1,659 @@
+openapi: 3.0.3
+info:
+  title: Paystack Wallet Service API
+  description: |
+    A wallet service that allows users to deposit money using Paystack, manage wallet balances, 
+    view transaction history, and transfer funds to other users. Supports both JWT authentication 
+    (from Google sign-in) and API keys for service-to-service access.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@walletservice.com
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.walletservice.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: Google OAuth and JWT generation
+  - name: API Keys
+    description: API key management for service-to-service access
+  - name: Wallet
+    description: Wallet operations including deposits, transfers, and balance
+  - name: Webhooks
+    description: Paystack webhook handlers
+
+paths:
+  /:
+    get:
+      tags:
+        - Health
+      summary: Root endpoint
+      description: Welcome message for the wallet service
+      responses:
+        '200':
+          description: Successful response
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Welcome to the Wallet Service
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the service is running
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Service is running
+
+  /auth/google:
+    get:
+      tags:
+        - Authentication
+      summary: Initiate Google OAuth login
+      description: |
+        Redirects the user to the Google sign-in page.
+
+        **Important:** This endpoint **cannot** be tested from Swagger, Postman, or any API client  
+        because Google OAuth does **not** allow redirects from fetch/XHR requests.
+
+        To use this endpoint, open it directly in your browser:  
+        **http://localhost:8080/auth/google**
+
+        The browser will follow the redirect to Google login correctly.
+      responses:
+        '307':
+          description: Temporary redirect to Google OAuth page
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Google OAuth authorization URL
+
+  /auth/google/callback:
+    get:
+      tags:
+        - Authentication
+      summary: Google OAuth callback
+      description: |
+        Handles the Google OAuth callback, exchanges the authorization code,
+        creates the user if necessary, and returns a JWT token.
+
+        **Note:** This endpoint is called **automatically by Google** after login.  
+        It cannot be used manually from Swagger unless you provide your own `code`.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from Google
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token for authenticated requests
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /keys/create:
+    post:
+      tags:
+        - API Keys
+      summary: Create a new API key
+      description: |
+        Creates a new API key with specific permissions. Maximum 5 active keys allowed per user.
+        Requires JWT authentication.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - permissions
+                - expiry
+              properties:
+                name:
+                  type: string
+                  description: Descriptive name for the API key
+                  example: wallet-service
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [deposit, transfer, read]
+                  description: List of permissions to grant
+                  example: ["deposit", "transfer", "read"]
+                expiry:
+                  type: string
+                  enum: [1H, 1D, 1M, 1Y]
+                  description: Expiry duration (Hour, Day, Month, Year)
+                  example: 1D
+      responses:
+        '200':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                    description: The generated API key (only shown once)
+                    example: sk_live_abc123xyz789
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: Expiration timestamp
+                    example: 2025-01-01T12:00:00Z
+        '400':
+          description: Invalid request or max keys reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidExpiry:
+                  value:
+                    error: "invalid expiry duration. Use: 1H, 1D, 1M, 1Y"
+                maxKeys:
+                  value:
+                    error: "maximum 5 active API keys allowed"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /keys/rollover:
+    post:
+      tags:
+        - API Keys
+      summary: Rollover an expired API key
+      description: |
+        Creates a new API key using the same permissions as an expired key.
+        The expired key must truly be expired. Requires JWT authentication.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - expired_key_id
+                - expiry
+              properties:
+                expired_key_id:
+                  type: string
+                  description: ID of the expired API key
+                  example: FGH2485K6KK79GKG9GKGK
+                expiry:
+                  type: string
+                  enum: [1H, 1D, 1M, 1Y]
+                  description: Expiry duration for new key
+                  example: 1M
+      responses:
+        '200':
+          description: API key rolled over successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                    description: The new API key
+                    example: sk_live_new123xyz789
+                  expires_at:
+                    type: string
+                    format: date-time
+                    example: 2025-02-01T12:00:00Z
+        '400':
+          description: Invalid request or key not expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notExpired:
+                  value:
+                    error: "key is not expired"
+                invalidKey:
+                  value:
+                    error: "invalid expired key ID"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /wallet/deposit:
+    post:
+      tags:
+        - Wallet
+      summary: Initiate a wallet deposit
+      description: |
+        Initializes a Paystack transaction for depositing funds into the wallet.
+        Returns a payment URL for the user to complete the transaction.
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+              properties:
+                amount:
+                  type: integer
+                  format: int64
+                  description: Amount to deposit in kobo (smallest currency unit)
+                  minimum: 1
+                  example: 5000
+      responses:
+        '200':
+          description: Deposit initiated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reference:
+                    type: string
+                    description: Unique transaction reference
+                    example: DEP_user123_5000
+                  authorization_url:
+                    type: string
+                    format: uri
+                    description: Paystack payment URL
+                    example: https://checkout.paystack.com/abc123xyz
+        '400':
+          description: Invalid amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "amount must be greater than 0"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /wallet/balance:
+    get:
+      tags:
+        - Wallet
+      summary: Get wallet balance
+      description: Retrieves the current balance of the authenticated user's wallet
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: integer
+                    format: int64
+                    description: Current wallet balance in kobo
+                    example: 15000
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /wallet/transfer:
+    post:
+      tags:
+        - Wallet
+      summary: Transfer funds to another wallet
+      description: |
+        Transfers money from the authenticated user's wallet to another user's wallet.
+        Checks sender balance and validates recipient before processing.
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - wallet_number
+                - amount
+              properties:
+                wallet_number:
+                  type: string
+                  description: Recipient's wallet number
+                  example: "4566678954356"
+                amount:
+                  type: integer
+                  format: int64
+                  description: Amount to transfer in kobo
+                  minimum: 1
+                  example: 3000
+      responses:
+        '200':
+          description: Transfer completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Transfer completed
+        '400':
+          description: Invalid request or insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                insufficientBalance:
+                  value:
+                    error: "insufficient balance"
+                invalidRecipient:
+                  value:
+                    error: "recipient wallet not found"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /wallet/transactions:
+    get:
+      tags:
+        - Wallet
+      summary: Get transaction history
+      description: Retrieves the transaction history for the authenticated user's wallet
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /wallet/paystack/webhook:
+    post:
+      tags:
+        - Webhooks
+      summary: Paystack webhook handler
+      description: |
+        Receives transaction updates from Paystack. Validates webhook signature and 
+        credits wallet upon successful payment. This is the only endpoint that should 
+        credit wallets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: string
+                  example: charge.success
+                data:
+                  type: object
+                  properties:
+                    reference:
+                      type: string
+                      example: DEP_user123_5000
+                    status:
+                      type: string
+                      example: success
+                    amount:
+                      type: integer
+                      example: 5000
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid webhook signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "invalid signature"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /wallet/deposit/{reference}/status:
+    get:
+      tags:
+        - Wallet
+      summary: Check deposit status
+      description: |
+        Manual verification endpoint to check the status of a deposit transaction.
+        This endpoint does NOT credit wallets - only the webhook does that.
+      parameters:
+        - name: reference
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Transaction reference to check
+          example: DEP_user123_5000
+      responses:
+        '200':
+          description: Status information retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Use webhook for real-time updates. This endpoint is for manual verification only.
+        '400':
+          description: Missing reference parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "reference is required"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from Google OAuth login
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key with specific permissions (deposit, transfer, read)
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: user_abc123
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        name:
+          type: string
+          example: John Doe
+        google_id:
+          type: string
+          example: "123456789"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          example: txn_abc123
+        type:
+          type: string
+          enum: [deposit, transfer, withdrawal]
+          example: deposit
+        amount:
+          type: integer
+          format: int64
+          description: Amount in kobo
+          example: 5000
+        status:
+          type: string
+          enum: [pending, success, failed]
+          example: success
+        reference:
+          type: string
+          example: DEP_user123_5000
+        created_at:
+          type: string
+          format: date-time
+        wallet_id:
+          type: string
+          example: wallet_xyz789
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "insufficient balance"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "invalid request body"
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "user not authenticated"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "insufficient permissions"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "internal server error"
+
+  examples:
+    DepositRequest:
+      value:
+        amount: 5000
+
+    TransferRequest:
+      value:
+        wallet_number: "4566678954356"
+        amount: 3000
+
+    CreateAPIKeyRequest:
+      value:
+        name: "wallet-service"
+        permissions: ["deposit", "transfer", "read"]
+        expiry: "1D"
+
+    RolloverAPIKeyRequest:
+      value:
+        expired_key_id: "FGH2485K6KK79GKG9GKGK"
+        expiry: "1M"

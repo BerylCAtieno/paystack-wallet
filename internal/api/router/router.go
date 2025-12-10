@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/BerylCAtieno/paystack-wallet/docs"
 	"github.com/BerylCAtieno/paystack-wallet/internal/api/handlers"
 	"github.com/BerylCAtieno/paystack-wallet/internal/api/middleware"
 	"github.com/BerylCAtieno/paystack-wallet/internal/config"
@@ -10,8 +11,12 @@ import (
 	"github.com/BerylCAtieno/paystack-wallet/internal/domain/wallet"
 	"github.com/BerylCAtieno/paystack-wallet/internal/paystack"
 	"github.com/BerylCAtieno/paystack-wallet/internal/repository"
+	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 type Router struct {
@@ -31,6 +36,16 @@ func NewRouter(
 	userRepo *repository.UserRepository,
 ) *Router {
 	engine := gin.Default()
+
+	// CORS Configuration
+	engine.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:8080/docs"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "x-api-key", "x-paystack-signature"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
+
 	r := &Router{
 		Engine:        engine,
 		cfg:           cfg,
@@ -53,8 +68,27 @@ func (r *Router) setupRoutes() {
 		c.String(http.StatusOK, "Service is running")
 	})
 
-	// AUTH ROUTES
+	// SWAGGER DOCUMENTATION
+	r.Engine.GET("/swagger.yaml", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/yaml", docs.SwaggerYAML)
+	})
 
+	// Alternative: if the file doesn't exist, return a helpful error
+	r.Engine.GET("/swagger-check", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Swagger file should be at ./docs/swagger.yaml",
+			"url":     "/swagger.yaml",
+		})
+	})
+
+	// Swagger UI handler
+	r.Engine.GET("/docs/*any", ginSwagger.WrapHandler(
+		swaggerFiles.Handler,
+		ginSwagger.URL("/swagger.yaml"),
+		ginSwagger.DefaultModelsExpandDepth(-1),
+	))
+
+	// AUTH ROUTES
 	authHandler := handlers.NewAuthHandler(
 		r.userRepo,
 		r.walletService,
@@ -68,7 +102,6 @@ func (r *Router) setupRoutes() {
 	r.Engine.GET("/auth/google/callback", authHandler.GoogleCallback)
 
 	// API KEY ROUTES (JWT)
-
 	apiKeyHandler := handlers.NewAPIKeyHandler(r.authService)
 
 	keysGroup := r.Engine.Group("/keys")
@@ -79,7 +112,6 @@ func (r *Router) setupRoutes() {
 	}
 
 	// WALLET ROUTES (JWT/API KEY)
-
 	paystackClient := paystack.NewClient(r.cfg.PaystackSecretKey)
 	walletHandler := handlers.NewWalletHandler(r.walletService, r.walletRepo, paystackClient)
 
@@ -110,7 +142,7 @@ func (r *Router) setupRoutes() {
 		)
 	}
 
-	// WEBHOOK (NO AUTH, SIGNATURE VALIDATION ONLY)
+	// WEBHOOK
 	webhookHandler := handlers.NewWebhookHandler(r.walletService, r.cfg.PaystackSecretKey)
 
 	r.Engine.POST("/wallet/paystack/webhook", webhookHandler.HandlePaystackWebhook)
